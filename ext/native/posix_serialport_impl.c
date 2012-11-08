@@ -35,6 +35,25 @@
 #undef HAVE_FLOWCONTROL_HARD
 #endif
 
+/* on mac os x, not all baud rates are defined in termios.h but
+   they are mapped to the numeric value anyway, so we define them here */
+#ifdef __APPLE__
+#ifndef B460800
+#define B460800 460800
+#endif
+#ifndef B500000
+#define B500000 500000
+#endif
+#ifndef B576000
+#define B576000 576000
+#endif
+#ifndef B921600
+#define B921600 921600
+#endif
+#ifndef B1000000
+#define B1000000 1000000
+#endif
+#endif
 
 static char sTcgetattr[] = "tcgetattr";
 static char sTcsetattr[] = "tcsetattr";
@@ -44,13 +63,13 @@ static char sIoctl[] = "ioctl";
 int get_fd_helper(obj)
    VALUE obj;
 {
-#ifdef RUBY_1_9
+#ifdef HAVE_RUBY_IO_H
    rb_io_t *fptr;
 #else
    OpenFile *fptr;
 #endif
    GetOpenFile(obj, fptr);
-#ifdef RUBY_1_9
+#ifdef HAVE_RUBY_IO_H
    return (fptr->fd);
 #else
    return (fileno(fptr->f));
@@ -60,7 +79,7 @@ int get_fd_helper(obj)
 VALUE sp_create_impl(class, _port)
    VALUE class, _port;
 {
-#ifdef RUBY_1_9
+#ifdef HAVE_RUBY_IO_H
    rb_io_t *fp;
 #else
    OpenFile *fp;
@@ -107,11 +126,7 @@ VALUE sp_create_impl(class, _port)
 
       case T_STRING:
          Check_SafeStr(_port);
-#ifdef RUBY_1_9
          port = RSTRING_PTR(_port);
-#else
-         port = RSTRING(_port)->ptr;
-#endif
          break;
 
       default:
@@ -152,7 +167,7 @@ VALUE sp_create_impl(class, _port)
       rb_sys_fail(sTcsetattr);
    }
 
-#ifdef RUBY_1_9
+#ifdef HAVE_RUBY_IO_H
    fp->fd = fd;
 #else
    fp->f = rb_fdopen(fd, "r+");
@@ -232,6 +247,21 @@ VALUE sp_set_modem_params_impl(argc, argv, self)
 #endif
 #ifdef B230400
       case 230400: data_rate = B230400; break;
+#endif
+#ifdef B460800
+      case 460800: data_rate = B460800; break;
+#endif
+#ifdef B500000
+      case 500000: data_rate = B500000; break;
+#endif
+#ifdef B576000
+      case 576000: data_rate = B576000; break;
+#endif
+#ifdef B921600
+      case 921600: data_rate = B921600; break;
+#endif
+#ifdef B1000000
+      case 1000000: data_rate = B1000000; break;
 #endif
 
       default:
@@ -388,6 +418,21 @@ void get_modem_params_impl(self, mp)
 #endif
 #ifdef B230400
       case B230400: mp->data_rate = 230400; break;
+#endif
+#ifdef B460800
+      case B460800: mp->data_rate = 460800; break;
+#endif
+#ifdef B500000
+      case B500000: mp->data_rate = 500000; break;
+#endif
+#ifdef B576000
+      case B576000: mp->data_rate = 576000; break;
+#endif
+#ifdef B921600
+      case B921600: mp->data_rate = 921600; break;
+#endif
+#ifdef B1000000
+      case B1000000: mp->data_rate = 1000000; break;
 #endif
    }
 
