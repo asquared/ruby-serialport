@@ -22,12 +22,21 @@
 /* Check if we are on a posix compliant system. */
 #if !defined(OS_MSWIN) && !defined(OS_BCCWIN) && !defined(OS_MINGW)
 
+#ifdef OS_LINUX
+/* rename termios to termios_k so it doesn't clash with termios.h */
+#define termios termios_k
+#include <asm/termbits.h> /* termios2 and BOTHER to support odd baud rates */
+#undef termios
+#endif
+
 #include <stdio.h>   /* Standard input/output definitions */
 #include <unistd.h>  /* UNIX standard function definitions */
 #include <fcntl.h>   /* File control definitions */
 #include <errno.h>   /* Error number definitions */
 #include <termios.h> /* POSIX terminal control definitions */
 #include <sys/ioctl.h>
+
+
 
 #ifdef CRTSCTS
 #define HAVE_FLOWCONTROL_HARD 1
@@ -59,6 +68,44 @@ static char sTcgetattr[] = "tcgetattr";
 static char sTcsetattr[] = "tcsetattr";
 static char sIoctl[] = "ioctl";
 
+#ifdef BOTHER
+static void set_bother(int fd, int rate) {
+   struct termios2 params;
+   int ret;
+
+   fprintf(stderr, "BOTHERing %d to %d\n", fd, rate);
+   ret = ioctl(fd, TCGETS2, &params);
+   if (ret != 0) {
+      rb_sys_fail("TCGETS2");
+   }
+
+   params.c_ispeed = rate;
+   params.c_ospeed = rate;
+   params.c_cflag &= ~CBAUD;
+   params.c_cflag |= BOTHER;
+
+   ret = ioctl(fd, TCSETS2, &params);
+   if (ret != 0) {
+      rb_sys_fail("TCSETS2");
+   }
+}
+
+static int get_bother(int fd) {
+   struct termios2 params;
+   int ret;
+
+   ret = ioctl(fd, TCGETS2, &params);
+   if (ret != 0) {
+      rb_sys_fail("TCGETS2");
+   }
+
+   if ((params.c_cflag & CBAUD) == BOTHER) {
+      return params.c_ispeed;
+   } else {
+      return 0;
+   }
+}
+#endif
 
 int get_fd_helper(obj)
    VALUE obj;
@@ -186,6 +233,9 @@ VALUE sp_set_modem_params_impl(argc, argv, self)
    VALUE _data_rate, _data_bits, _parity, _stop_bits;
    int use_hash = 0;
    int data_rate, data_bits;
+#ifdef BOTHER
+   int bother_rate = 0;
+#endif
    _data_rate = _data_bits = _parity = _stop_bits = Qnil;
 
    if (argc == 0)
@@ -265,7 +315,11 @@ VALUE sp_set_modem_params_impl(argc, argv, self)
 #endif
 
       default:
+#ifdef BOTHER
+                   bother_rate = FIX2INT(_data_rate);
+#else
                    rb_raise(rb_eArgError, "unknown baud rate");
+#endif
                    break;
    }
    cfsetispeed(&params, data_rate);
@@ -374,6 +428,12 @@ VALUE sp_set_modem_params_impl(argc, argv, self)
    {
       rb_sys_fail(sTcsetattr);
    }
+
+#ifdef BOTHER
+   if (bother_rate) {
+      set_bother(fd, bother_rate);
+   }
+#endif
    return argv[0];
 }
 
@@ -383,12 +443,19 @@ void get_modem_params_impl(self, mp)
 {
    int fd;
    struct termios params;
+#ifdef BOTHER
+   int bother_rate;
+#endif
 
    fd = get_fd_helper(self);
    if (tcgetattr(fd, &params) == -1)
    {
       rb_sys_fail(sTcgetattr);
    }
+
+#ifdef BOTHER
+   bother_rate = get_bother(fd);
+#endif
 
    switch (cfgetospeed(&params))
    {
@@ -435,6 +502,12 @@ void get_modem_params_impl(self, mp)
       case B1000000: mp->data_rate = 1000000; break;
 #endif
    }
+
+#ifdef BOTHER
+   if (bother_rate != 0) {
+      mp->data_rate = bother_rate;
+   }
+#endif
 
    switch(params.c_cflag & CSIZE)
    {
